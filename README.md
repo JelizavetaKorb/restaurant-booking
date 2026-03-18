@@ -2,7 +2,7 @@
 Restaurant table reservation app with a visual floor plan. Built as a take-home assignment.
 
 ## How to Run
-You need **Java 21**. Check with `java -version`. On Mac: `brew install openjdk@21`.
+You need **Java 21**. Check with `java -version`. Install on Mac: `brew install openjdk@21`.
 No need to install Maven, the project has a wrapper included.
 ```bash
 git clone <copied-repository-url>
