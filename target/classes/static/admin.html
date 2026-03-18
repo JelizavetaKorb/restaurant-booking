@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel | Restaurant</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <a href="/" id="backLink" class="back-link">&#8592; Back to reservations</a>
+
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <h2>Admin Access</h2>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter admin password" onkeypress="if(event.key==='Enter')login()">
+            </div>
+            <button class="btn btn-primary" onclick="login()">Login</button>
+            <div id="loginError" class="error" style="display:none;">Incorrect password</div>
+        </div>
+    </div>
+
+    <div id="adminContent" class="admin-content">
+        <div class="container">
+            <header>
+                <div class="header-left">
+                    <h1>Admin Panel</h1>
+                    <p class="subtitle">Restaurant Management</p>
+                </div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </header>
+            <div class="stats">
+                <div class="stat-card"><div class="stat-number" id="totalTables">--</div><div class="stat-label">Total Tables</div></div>
+                <div class="stat-card"><div class="stat-number" id="todayBookings">--</div><div class="stat-label">Today's Bookings</div></div>
+                <div class="stat-card"><div class="stat-number" id="upcomingBookings">--</div><div class="stat-label">Upcoming Bookings</div></div>
+            </div>
+            <div class="working-hours-section">
+                <h3>Working Hours</h3>
+                <div class="wh-row">
+                    <div class="form-group">
+                        <label for="whOpen">Opens at</label>
+                        <input type="time" id="whOpen" value="10:00">
+                    </div>
+                    <div class="form-group">
+                        <label for="whClose">Closes at</label>
+                        <input type="time" id="whClose" value="22:00">
+                    </div>
+                    <button class="wh-save-btn" onclick="saveWorkingHours()">Save</button>
+                    <span class="wh-status" id="whStatus">&#10003; Saved</span>
+                </div>
+            </div>
+            <div class="floor-plan">
+                <div class="floor-plan-header">
+                    <h3>Floor Plan Management</h3>
+                    <button class="add-table-btn" onclick="openAddTableModal()" title="Add new table">+</button>
+                </div>
+                <div class="instructions">
+                    <strong>Instructions:</strong> Drag tables to reposition. Click a table to edit its settings. Use the + button to add a new table.
+                </div>
+                <svg id="adminFloorPlan" viewBox="0 0 100 100"></svg>
+            </div>
+            <div class="bookings-section">
+                <div class="bookings-header">
+                    <h3>Reservations</h3>
+                    <div class="date-filter">
+                        <label style="font-size:13px;color:#555;margin:0;">Filter by date:</label>
+                        <input type="date" id="bookingDateFilter">
+                        <button onclick="filterBookingsByDate()" id="filterBtn">Filter</button>
+                        <button onclick="clearBookingFilter()" id="clearFilterBtn" style="display:none;" title="Clear filter">&times;</button>
+                    </div>
+                </div>
+                <table class="bookings-table">
+                    <thead>
+                        <tr><th>Table</th><th>Guest</th><th>Party</th><th>Date</th><th>From</th><th>To</th><th></th></tr>
+                    </thead>
+                    <tbody id="bookingsTableBody">
+                        <tr><td colspan="7" style="text-align:center;color:#999;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="tableModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3 id="tableModalTitle">Edit Table</h3>
+            <div class="form-group">
+                <label for="editTableCapacity">Capacity</label>
+                <input type="number" id="editTableCapacity" min="1" placeholder="4">
+            </div>
+            <div class="form-group">
+                <label for="editTableZone">Zone</label>
+                <select id="editTableZone">
+                    <option value="INDOOR">Indoor</option>
+                    <option value="TERRACE">Terrace</option>
+                    <option value="PRIVATE">Private</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Preferences</label>
+                <div class="tag-checkboxes">
+                    <div class="tag-checkbox"><input type="checkbox" id="tagWindow" value="WINDOW"><label for="tagWindow">Window</label></div>
+                    <div class="tag-checkbox"><input type="checkbox" id="tagQuiet" value="QUIET"><label for="tagQuiet">Quiet</label></div>
+                    <div class="tag-checkbox"><input type="checkbox" id="tagKids" value="KIDS"><label for="tagKids">Family</label></div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" id="deleteTableBtn" onclick="deleteTable()">Delete</button>
+                <div style="flex:1;"></div>
+                <button class="btn btn-secondary" onclick="closeTableModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveTable()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var isDragging = false, dragElement = null, tables = [];
+        var didDrag = false, editingTableId = null, isNewTable = false;
+        var dragStart = { x: 0, y: 0 }, dragOffset = { x: 0, y: 0 };
+        var SVG_NS = 'http://www.w3.org/2000/svg';
+
+        var ZONES = [
+            { name: 'INDOOR',  x: 5, y: 5, w: 68, h: 52, fill: '#f5f9ff', stroke: '#d0dff0', label: 'Indoor', labelX: 39, labelY: 8, labelColor: '#7a9cc6' },
+            { name: 'TERRACE', x: 5, y: 59, w: 91, h: 36, fill: '#f2faf2', stroke: '#c8e6c8', label: 'Terrace', labelX: 50, labelY: 62, labelColor: '#6aad6a' },
+            { name: 'PRIVATE', x: 74, y: 5, w: 22, h: 52, fill: '#faf2fb', stroke: '#e0cce4', label: 'Private', labelX: 85, labelY: 8, labelColor: '#a07aad' }
+        ];
+
+        function detectZone(xPct, yPct) {
+            for (var i = ZONES.length - 1; i >= 0; i--) {
+                var z = ZONES[i];
+                if (xPct >= z.x && xPct <= z.x + z.w && yPct >= z.y && yPct <= z.y + z.h) return z.name;
+            }
+            return 'INDOOR';
+        }
+
+        function svgPoint(svg, clientX, clientY) {
+            var pt = svg.createSVGPoint();
+            pt.x = clientX; pt.y = clientY;
+            return pt.matrixTransform(svg.getScreenCTM().inverse());
+        }
+
+        function login() {
+            var pw = document.getElementById('password').value;
+            var err = document.getElementById('loginError');
+            if (pw === 'admin123') {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('adminContent').style.display = 'block';
+                document.getElementById('backLink').classList.add('hidden');
+                loadAdminData();
+            } else {
+                err.style.display = 'block';
+                setTimeout(function() { err.style.display = 'none'; }, 3000);
+            }
+        }
+
+        function logout() {
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('adminContent').style.display = 'none';
+            document.getElementById('backLink').classList.remove('hidden');
+            document.getElementById('password').value = '';
+        }
+
+        function loadAdminData() { loadTables(function() { loadBookings(); }); loadStats(); loadWorkingHours(); }
+
+        function loadWorkingHours() {
+            fetch('/api/settings/working-hours').then(function(r){return r.json();}).then(function(wh){
+                if (wh.openTime) document.getElementById('whOpen').value = wh.openTime.substring(0,5);
+                if (wh.closeTime) document.getElementById('whClose').value = wh.closeTime.substring(0,5);
+            }).catch(function(e){ console.error('Failed to load working hours', e); });
+        }
+
+        function saveWorkingHours() {
+            var open = document.getElementById('whOpen').value;
+            var close = document.getElementById('whClose').value;
+            if (!open || !close) { alert('Please set both opening and closing times.'); return; }
+            if (open >= close) { alert('Opening time must be before closing time.'); return; }
+            fetch('/api/settings/working-hours', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ openTime: open, closeTime: close })
+            }).then(function(r) {
+                if (r.ok) {
+                    var st = document.getElementById('whStatus');
+                    st.classList.add('show');
+                    setTimeout(function(){ st.classList.remove('show'); }, 2000);
+                } else { alert('Failed to save working hours.'); }
+            }).catch(function(){ alert('Error saving working hours.'); });
+        }
+
+        function loadTables(callback) {
+            fetch('/api/tables').then(function(r){return r.json();}).then(function(d){ tables=d; renderAdminFloorPlan(d); if(callback) callback(); }).catch(function(e){ console.error(e); if(callback) callback(); });
+        }
+
+        function renderAdminFloorPlan(tbl) {
+            var svg = document.getElementById('adminFloorPlan');
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+            ZONES.forEach(function(z) {
+                var bg = document.createElementNS(SVG_NS, 'rect');
+                bg.setAttribute('x', z.x); bg.setAttribute('y', z.y);
+                bg.setAttribute('width', z.w); bg.setAttribute('height', z.h);
+                bg.setAttribute('rx', 2); bg.setAttribute('fill', z.fill);
+                bg.setAttribute('stroke', z.stroke); bg.setAttribute('stroke-width', '0.3');
+                svg.appendChild(bg);
+                var lbl = document.createElementNS(SVG_NS, 'text');
+                lbl.setAttribute('x', z.labelX); lbl.setAttribute('y', z.labelY);
+                lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('font-size', '2px');
+                lbl.setAttribute('fill', z.labelColor); lbl.setAttribute('font-weight', '600');
+                lbl.setAttribute('font-family', 'Arial,sans-serif');
+                lbl.textContent = z.label;
+                svg.appendChild(lbl);
+            });
+
+            tbl.forEach(function(t) {
+                var g = document.createElementNS(SVG_NS, 'g');
+                g.setAttribute('data-table-id', t.id);
+                g.style.cursor = 'pointer';
+                var rect = document.createElementNS(SVG_NS, 'rect');
+                rect.setAttribute('x', t.x); rect.setAttribute('y', t.y);
+                rect.setAttribute('width', t.width); rect.setAttribute('height', t.height);
+                rect.setAttribute('rx', '1');
+                rect.setAttribute('class', 'table-rect zone-' + t.zone.toLowerCase());
+                g.appendChild(rect);
+                var cx = t.x + t.width / 2, cy = t.y + t.height / 2;
+                var nm = document.createElementNS(SVG_NS, 'text');
+                nm.setAttribute('x', cx); nm.setAttribute('y', cy);
+                nm.setAttribute('class', 'table-name'); nm.textContent = t.name;
+                g.appendChild(nm);
+                g.addEventListener('mousedown', startDrag);
+                svg.appendChild(g);
+            });
+        }
+
+        function startDrag(e) {
+            var svg = document.getElementById('adminFloorPlan');
+            isDragging = true; didDrag = false;
+            dragElement = e.currentTarget;
+            var pt = svgPoint(svg, e.clientX, e.clientY);
+            var rect = dragElement.querySelector('rect');
+            dragOffset.x = pt.x - parseFloat(rect.getAttribute('x'));
+            dragOffset.y = pt.y - parseFloat(rect.getAttribute('y'));
+            dragStart.x = e.clientX; dragStart.y = e.clientY;
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+            e.preventDefault();
+        }
+
+        function drag(e) {
+            if (!isDragging || !dragElement) return;
+            var dx = Math.abs(e.clientX - dragStart.x), dy = Math.abs(e.clientY - dragStart.y);
+            if (dx > 3 || dy > 3) didDrag = true;
+            var svg = document.getElementById('adminFloorPlan');
+            var pt = svgPoint(svg, e.clientX, e.clientY);
+            var rect = dragElement.querySelector('rect');
+            var w = parseFloat(rect.getAttribute('width')), h = parseFloat(rect.getAttribute('height'));
+            var nx = Math.max(0, Math.min(pt.x - dragOffset.x, 100 - w));
+            var ny = Math.max(0, Math.min(pt.y - dragOffset.y, 100 - h));
+            rect.setAttribute('x', nx); rect.setAttribute('y', ny);
+            var nm = dragElement.querySelector('text');
+            nm.setAttribute('x', nx + w / 2); nm.setAttribute('y', ny + h / 2);
+        }
+
+        function endDrag(e) {
+            if (!isDragging || !dragElement) return;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', endDrag);
+            var tid = dragElement.getAttribute('data-table-id');
+            if (!didDrag) {
+                isDragging = false; dragElement = null;
+                openEditTableModal(tid);
+                return;
+            }
+            var rect = dragElement.querySelector('rect');
+            var x = parseFloat(rect.getAttribute('x'));
+            var y = parseFloat(rect.getAttribute('y'));
+            var w = parseFloat(rect.getAttribute('width')), h = parseFloat(rect.getAttribute('height'));
+            var nz = detectZone(x + w / 2, y + h / 2);
+            fetch('/api/tables/' + tid + '/position', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x: x, y: y, zone: nz }) })
+                .then(function() { loadTables(); }).catch(function() { loadTables(); });
+            isDragging = false; dragElement = null;
+        }
+
+        function openEditTableModal(tableId) {
+            var t = tables.find(function(x){return x.id == tableId;});
+            if (!t) return;
+            editingTableId = t.id; isNewTable = false;
+            document.getElementById('tableModalTitle').textContent = 'Edit ' + t.name;
+            document.getElementById('editTableCapacity').value = t.capacity;
+            document.getElementById('editTableZone').value = t.zone;
+            document.getElementById('tagWindow').checked = t.tags && t.tags.indexOf('WINDOW') !== -1;
+            document.getElementById('tagQuiet').checked = t.tags && t.tags.indexOf('QUIET') !== -1;
+            document.getElementById('tagKids').checked = t.tags && t.tags.indexOf('KIDS') !== -1;
+            document.getElementById('deleteTableBtn').style.display = 'inline-block';
+            document.getElementById('tableModal').style.display = 'block';
+        }
+
+        function openAddTableModal() {
+            editingTableId = null; isNewTable = true;
+            document.getElementById('tableModalTitle').textContent = 'Add New Table';
+            document.getElementById('editTableCapacity').value = '4';
+            document.getElementById('editTableZone').value = 'INDOOR';
+            document.getElementById('tagWindow').checked = false;
+            document.getElementById('tagQuiet').checked = false;
+            document.getElementById('tagKids').checked = false;
+            document.getElementById('deleteTableBtn').style.display = 'none';
+            document.getElementById('tableModal').style.display = 'block';
+        }
+
+        function closeTableModal() {
+            document.getElementById('tableModal').style.display = 'none';
+            editingTableId = null; isNewTable = false;
+        }
+
+        function getSelectedTags() {
+            var tags = [];
+            if (document.getElementById('tagWindow').checked) tags.push('WINDOW');
+            if (document.getElementById('tagQuiet').checked) tags.push('QUIET');
+            if (document.getElementById('tagKids').checked) tags.push('KIDS');
+            return tags;
+        }
+
+        function saveTable() {
+            var capacity = parseInt(document.getElementById('editTableCapacity').value);
+            var zone = document.getElementById('editTableZone').value;
+            var tags = getSelectedTags();
+            if (!capacity || capacity < 1) { alert('Please enter a valid capacity.'); return; }
+            var body = { capacity: capacity, zone: zone, tags: tags };
+            if (isNewTable) {
+                fetch('/api/tables', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                    .then(function(r){ if (r.ok) { closeTableModal(); loadTables(); loadStats(); } else { alert('Failed to create table.'); } })
+                    .catch(function(){ alert('Error creating table.'); });
+            } else {
+                fetch('/api/tables/' + editingTableId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                    .then(function(r){ if (r.ok) { closeTableModal(); loadTables(); } else { alert('Failed to update table.'); } })
+                    .catch(function(){ alert('Error updating table.'); });
+            }
+        }
+
+        function deleteTable() {
+            if (!editingTableId) return;
+            if (!confirm('Delete this table and all its bookings? This cannot be undone.')) return;
+            fetch('/api/tables/' + editingTableId, { method: 'DELETE' })
+                .then(function(r) {
+                    if (r.ok) { closeTableModal(); loadTables(); loadBookings(); loadStats(); }
+                    else { alert('Failed to delete table.'); }
+                })
+                .catch(function(){ alert('Error deleting table.'); });
+        }
+
+        function loadBookings(date) {
+            var url = '/api/bookings';
+            if (date) url += '?date=' + date;
+            fetch(url).then(function(r){return r.json();}).then(function(b){ renderBookings(b); })
+                .catch(function(){ document.getElementById('bookingsTableBody').innerHTML='<tr><td colspan="7" style="text-align:center;color:red;">Error</td></tr>'; });
+        }
+
+        function renderBookings(bookings) {
+            var tbody = document.getElementById('bookingsTableBody');
+            if (bookings.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">No reservations found</td></tr>'; return; }
+
+            var groups = [];
+            var grouped = {};
+            bookings.forEach(function(b) {
+                if (b.groupId) {
+                    if (!grouped[b.groupId]) { grouped[b.groupId] = []; }
+                    grouped[b.groupId].push(b);
+                } else {
+                    groups.push([b]);
+                }
+            });
+            Object.keys(grouped).forEach(function(gid) { groups.push(grouped[gid]); });
+
+            groups.sort(function(a, b) {
+                var da = a[0].date, db = b[0].date;
+                if (da !== db) return da < db ? -1 : 1;
+                var ta = a[0].startTime || '', tb = b[0].startTime || '';
+                return ta < tb ? -1 : ta > tb ? 1 : 0;
+            });
+
+            tbody.innerHTML = groups.map(function(group) {
+                var first = group[0];
+                var tableNames = group.map(function(b) {
+                    return b.tableName || 'T?';
+                }).join(' + ');
+                var start = first.startTime ? first.startTime.substring(0,5) : '';
+                var end = first.endTime ? first.endTime.substring(0,5) : '';
+                var allIds = group.map(function(b){ return b.id; });
+                return '<tr><td>'+tableNames+'</td><td>'+first.guestName+'</td><td>'+first.partySize+'</td><td>'+new Date(first.date).toLocaleDateString()+'</td><td>'+start+'</td><td>'+end+'</td><td><button class="delete-btn" onclick="deleteBooking('+allIds[0]+')">Delete</button></td></tr>';
+            }).join('');
+        }
+
+        function deleteBooking(id) {
+            if (!confirm('Are you sure you want to delete this booking?')) return;
+            fetch('/api/bookings/' + id, { method: 'DELETE' })
+                .then(function(r) {
+                    if (r.ok) {
+                        var dateVal = document.getElementById('bookingDateFilter').value;
+                        loadBookings(dateVal || undefined);
+                        loadStats();
+                    } else { alert('Failed to delete booking.'); }
+                })
+                .catch(function() { alert('Error deleting booking.'); });
+        }
+
+        function filterBookingsByDate() {
+            var dateVal = document.getElementById('bookingDateFilter').value;
+            if (!dateVal) { alert('Please select a date.'); return; }
+            loadBookings(dateVal);
+            document.getElementById('clearFilterBtn').style.display = 'inline-block';
+        }
+
+        function clearBookingFilter() {
+            document.getElementById('bookingDateFilter').value = '';
+            document.getElementById('clearFilterBtn').style.display = 'none';
+            loadBookings();
+        }
+
+        function loadStats() {
+            fetch('/api/tables').then(function(r){return r.json();}).then(function(t){ document.getElementById('totalTables').textContent=t.length; });
+            fetch('/api/bookings').then(function(r){return r.json();}).then(function(b){
+                var td=new Date().toISOString().split('T')[0];
+                document.getElementById('todayBookings').textContent=b.filter(function(x){return x.date===td;}).length;
+                document.getElementById('upcomingBookings').textContent=b.length;
+            });
+        }
+
+        window.addEventListener('resize', function(){ if(tables.length>0) renderAdminFloorPlan(tables); });
+        document.addEventListener('selectstart', function(e){ if(isDragging) e.preventDefault(); });
+        window.onclick = function(e) { if (e.target === document.getElementById('tableModal')) closeTableModal(); };
+    </script>
+</body>
+</html>

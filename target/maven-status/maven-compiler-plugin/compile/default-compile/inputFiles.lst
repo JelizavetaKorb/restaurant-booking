@@ -1,0 +1,14 @@
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/TableTag.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/TableStatus.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/controller/SettingsController.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/Zone.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/repository/TableRepository.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/RestaurantTable.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/WorkingHours.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/service/BookingService.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/repository/WorkingHoursRepository.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/controller/TableController.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/repository/BookingRepository.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/model/Booking.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/controller/BookingController.java
+/Users/mihhailkorb/restaurant-booking/src/main/java/com/restaurant/RestaurantBookingApplication.java

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reserve a Table | Restaurant</title>
+    <link rel="stylesheet" href="/css/index.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Restaurant</h1>
+            <p class="subtitle">Reserve your perfect table</p>
+            <a href="/admin.html" class="admin-link">Admin</a>
+        </header>
+        <div class="filter-bar">
+            <div class="form-group">
+                <label for="date">Date</label>
+                <input type="date" id="date" required>
+            </div>
+            <div class="form-group">
+                <label for="time">Time</label>
+                <input type="time" id="time" required>
+            </div>
+            <div class="form-group">
+                <label for="partySize">Party Size</label>
+                <input type="number" id="partySize" min="1" placeholder="2">
+            </div>
+            <div class="form-group">
+                <label for="zone">Preferred Area</label>
+                <select id="zone">
+                    <option value="">Any Area</option>
+                    <option value="INDOOR">Indoor</option>
+                    <option value="TERRACE">Terrace</option>
+                    <option value="PRIVATE">Private Dining</option>
+                </select>
+            </div>
+            <div class="form-group preferences">
+                <label>Preferences</label>
+                <div class="pref-options">
+                    <div class="pref-checkbox"><input type="checkbox" id="window" value="WINDOW"><label for="window">Window</label></div>
+                    <div class="pref-checkbox"><input type="checkbox" id="quiet" value="QUIET"><label for="quiet">Quiet</label></div>
+                    <div class="pref-checkbox"><input type="checkbox" id="kids" value="KIDS"><label for="kids">Family</label></div>
+                </div>
+            </div>
+            <div class="form-group-btn">
+                <button class="search-btn" onclick="loadTables()">Search</button>
+            </div>
+        </div>
+        <div class="floor-plan">
+            <h3>Floor Plan</h3>
+            <svg id="floorPlanSvg" viewBox="0 0 100 100"></svg>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color legend-free"></div><span>Available</span></div>
+                <div class="legend-item"><div class="legend-color legend-recommended"></div><span>Recommended</span></div>
+                <div class="legend-item"><div class="legend-color legend-booked"></div><span>Booked</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="bookingModal" class="modal">
+        <div class="modal-content">
+            <h3>Reserve Your Table</h3>
+            <div class="booking-details" id="bookingDetails"></div>
+            <div class="form-group">
+                <label for="guestName">Guest Name</label>
+                <input type="text" id="guestName" placeholder="Your name" required>
+            </div>
+            <div class="duration-row">
+                <div class="form-group">
+                    <label for="durationSelect">Duration</label>
+                    <select id="durationSelect">
+                        <option value="1">1 hour</option>
+                        <option value="1.5">1.5 hours</option>
+                        <option value="2" selected>2 hours</option>
+                        <option value="2.5">2.5 hours</option>
+                        <option value="3">3 hours</option>
+                        <option value="4">4 hours</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>End Time</label>
+                    <input type="text" id="endTimeDisplay" readonly style="background:#f5f5f5;color:#555;">
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmBooking()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var selectedTable = null;
+        var selectedGroup = null;
+        var allTables = [];
+        var currentFilters = {};
+        var workingHours = null;
+        var SVG_NS = 'http://www.w3.org/2000/svg';
+
+        function clearSvg(svg) { while (svg.firstChild) svg.removeChild(svg.firstChild); }
+
+        function svgText(x, y, content, attrs) {
+            var el = document.createElementNS(SVG_NS, 'text');
+            el.setAttribute('x', x); el.setAttribute('y', y);
+            el.setAttribute('text-anchor', 'middle');
+            if (attrs) Object.keys(attrs).forEach(function(k) { el.setAttribute(k, attrs[k]); });
+            el.textContent = content;
+            return el;
+        }
+
+        var ZONE_RECTS = [
+            { x: 5, y: 5, w: 68, h: 52, fill: '#f5f9ff', stroke: '#d0dff0', label: 'Indoor', labelX: 39, labelY: 8, labelColor: '#7a9cc6' },
+            { x: 5, y: 59, w: 91, h: 36, fill: '#f2faf2', stroke: '#c8e6c8', label: 'Terrace', labelX: 50, labelY: 62, labelColor: '#6aad6a' },
+            { x: 74, y: 5, w: 22, h: 52, fill: '#faf2fb', stroke: '#e0cce4', label: 'Private', labelX: 85, labelY: 8, labelColor: '#a07aad' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var now = new Date();
+            document.getElementById('date').value = now.toISOString().split('T')[0];
+            var m = now.getMinutes(), h = m < 30 ? now.getHours() : now.getHours() + 1;
+            var rm = m < 30 ? '30' : '00';
+            if (h >= 24) h = 0;
+            document.getElementById('time').value = String(h).padStart(2,'0') + ':' + rm;
+
+            document.getElementById('durationSelect').addEventListener('change', updateEndTimeDisplay);
+
+            fetch('/api/tables/max-capacity').then(function(r){return r.json();}).then(function(max){
+                document.getElementById('partySize').setAttribute('max', max);
+            }).catch(function(){});
+
+            fetch('/api/settings/working-hours').then(function(r){return r.json();}).then(function(wh){
+                workingHours = wh;
+                var timeInput = document.getElementById('time');
+                var openStr = wh.openTime ? wh.openTime.substring(0,5) : '00:00';
+                var closeStr = wh.closeTime ? wh.closeTime.substring(0,5) : '23:59';
+                var lastStartStr = addHoursToTime(closeStr, -1);
+                timeInput.setAttribute('min', openStr);
+                timeInput.setAttribute('max', lastStartStr);
+                if (timeInput.value < openStr) timeInput.value = openStr;
+                if (timeInput.value > lastStartStr) timeInput.value = lastStartStr;
+                loadTables();
+            }).catch(function(){
+                loadTables();
+            });
+        });
+
+        function addHoursToTime(timeStr, hours) {
+            var parts = timeStr.split(':');
+            var totalMinutes = parseInt(parts[0]) * 60 + parseInt(parts[1]) + Math.round(hours * 60);
+            if (totalMinutes < 0) totalMinutes += 24 * 60;
+            var h = Math.floor(totalMinutes / 60) % 24;
+            var m = totalMinutes % 60;
+            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        }
+
+        function timeToMinutes(timeStr) {
+            var parts = timeStr.split(':');
+            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        }
+
+        function updateEndTimeDisplay() {
+            var startTime = currentFilters.time || document.getElementById('time').value;
+            var dur = parseFloat(document.getElementById('durationSelect').value);
+            var endTime = addHoursToTime(startTime, dur);
+            document.getElementById('endTimeDisplay').value = endTime;
+        }
+
+        function filterDurationOptions(startTime) {
+            var sel = document.getElementById('durationSelect');
+            var allDurations = [1, 1.5, 2, 2.5, 3, 4];
+            var labels = { 1: '1 hour', 1.5: '1.5 hours', 2: '2 hours', 2.5: '2.5 hours', 3: '3 hours', 4: '4 hours' };
+            var maxHours = 4;
+
+            if (workingHours && workingHours.closeTime) {
+                var closeStr = workingHours.closeTime.substring(0, 5);
+                var startMin = timeToMinutes(startTime);
+                var closeMin = timeToMinutes(closeStr);
+                var available = closeMin - startMin;
+                if (available > 0) {
+                    maxHours = available / 60;
+                } else {
+                    maxHours = 0;
+                }
+            }
+
+            sel.innerHTML = '';
+            var bestDefault = null;
+            allDurations.forEach(function(d) {
+                if (d <= maxHours) {
+                    var opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = labels[d];
+                    sel.appendChild(opt);
+                    if (d <= 2) bestDefault = d;
+                }
+            });
+
+            if (sel.options.length === 0 && maxHours > 0) {
+                var rounded = Math.floor(maxHours * 2) / 2;
+                if (rounded >= 0.5) {
+                    var opt = document.createElement('option');
+                    opt.value = rounded;
+                    opt.textContent = rounded + (rounded === 1 ? ' hour' : ' hours');
+                    sel.appendChild(opt);
+                    bestDefault = rounded;
+                }
+            }
+
+            if (bestDefault !== null) {
+                sel.value = bestDefault;
+            } else if (sel.options.length > 0) {
+                sel.selectedIndex = sel.options.length - 1;
+            }
+        }
+
+        function loadTables() {
+            var date = document.getElementById('date').value;
+            var time = document.getElementById('time').value;
+            var partySize = document.getElementById('partySize').value;
+            var zone = document.getElementById('zone').value;
+
+            if (workingHours) {
+                var openStr = workingHours.openTime ? workingHours.openTime.substring(0,5) : null;
+                var closeStr = workingHours.closeTime ? workingHours.closeTime.substring(0,5) : null;
+                if (openStr && time < openStr) {
+                    alert('Restaurant opens at ' + openStr + '. Please choose a later time.');
+                    document.getElementById('time').value = openStr;
+                    return;
+                }
+                if (closeStr) {
+                    var lastStart = addHoursToTime(closeStr, -1);
+                    if (time > lastStart) {
+                        alert('Last reservation must start by ' + lastStart + ' (restaurant closes at ' + closeStr + ').');
+                        document.getElementById('time').value = lastStart;
+                        return;
+                    }
+                }
+            }
+
+            var prefs = [];
+            if (document.getElementById('window').checked) prefs.push('WINDOW');
+            if (document.getElementById('quiet').checked) prefs.push('QUIET');
+            if (document.getElementById('kids').checked) prefs.push('KIDS');
+            currentFilters = { date: date, time: time, partySize: partySize, zone: zone, preferences: prefs };
+            var params = new URLSearchParams();
+            if (date) params.append('date', date);
+            if (time) params.append('time', time);
+            if (partySize) params.append('partySize', partySize);
+            if (zone) params.append('zone', zone);
+            prefs.forEach(function(p) { params.append('prefs', p); });
+            var url = '/api/tables' + (params.toString() ? '?' + params.toString() : '');
+            var svg = document.getElementById('floorPlanSvg');
+            clearSvg(svg);
+            svg.appendChild(svgText(50, 50, 'Loading...', { 'class': 'loading' }));
+            fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function(tables) { allTables = tables; renderFloorPlan(tables); })
+                .catch(function(err) { clearSvg(svg); svg.appendChild(svgText(50, 50, 'Error: ' + err.message, { fill: 'red' })); });
+        }
+
+        function renderFloorPlan(tables) {
+            var svg = document.getElementById('floorPlanSvg');
+            clearSvg(svg);
+            if (!tables || tables.length === 0) { svg.appendChild(svgText(50, 50, 'No tables found', { fill: '#999' })); return; }
+            ZONE_RECTS.forEach(function(z) {
+                var bg = document.createElementNS(SVG_NS, 'rect');
+                bg.setAttribute('x', z.x); bg.setAttribute('y', z.y);
+                bg.setAttribute('width', z.w); bg.setAttribute('height', z.h);
+                bg.setAttribute('rx', 2); bg.setAttribute('fill', z.fill);
+                bg.setAttribute('stroke', z.stroke); bg.setAttribute('stroke-width', '0.3');
+                svg.appendChild(bg);
+                svg.appendChild(svgText(z.labelX, z.labelY, z.label, { 'font-size': '2px', fill: z.labelColor, 'font-weight': '600', 'font-family': 'Arial,sans-serif' }));
+            });
+            tables.forEach(function(table) {
+                var g = document.createElementNS(SVG_NS, 'g');
+                var rect = document.createElementNS(SVG_NS, 'rect');
+                rect.setAttribute('x', table.x); rect.setAttribute('y', table.y);
+                rect.setAttribute('width', table.width); rect.setAttribute('height', table.height);
+                rect.setAttribute('rx', '1');
+                rect.setAttribute('class', 'table-rect ' + table.status.toLowerCase());
+                g.appendChild(rect);
+                var cx = table.x + table.width / 2, cy = table.y + table.height / 2;
+                var nm = document.createElementNS(SVG_NS, 'text');
+                nm.setAttribute('x', cx); nm.setAttribute('y', cy);
+                nm.setAttribute('class', 'table-name'); nm.textContent = table.name;
+                g.appendChild(nm);
+                if (table.status !== 'BOOKED') {
+                    g.style.cursor = 'pointer';
+                    g.onclick = function() { selectTable(table); };
+                }
+                svg.appendChild(g);
+            });
+        }
+
+        function selectTable(table) {
+            if (workingHours && workingHours.closeTime) {
+                var closeStr = workingHours.closeTime.substring(0, 5);
+                var startMin = timeToMinutes(currentFilters.time);
+                var closeMin = timeToMinutes(closeStr);
+                if (startMin >= closeMin) {
+                    alert('Restaurant closes at ' + closeStr + '. Please choose an earlier time.');
+                    return;
+                }
+                if (closeMin - startMin < 30) {
+                    alert('Not enough time before closing (' + closeStr + '). Please choose an earlier time.');
+                    return;
+                }
+            }
+
+            selectedTable = table;
+            selectedGroup = null;
+            var ps = currentFilters.partySize || '2';
+            var tagsHtml = '';
+            if (table.tags && table.tags.length > 0) {
+                var tagLabels = { WINDOW: 'Window', QUIET: 'Quiet', KIDS: 'Family-friendly' };
+                tagsHtml = '<p><strong>Features:</strong> ' + table.tags.map(function(t){ return tagLabels[t] || t; }).join(', ') + '</p>';
+            }
+
+            // Check if this table is part of a multi-table recommendation group
+            if (table.recommendedWith && table.recommendedWith.length > 1) {
+                selectedGroup = table.recommendedWith.map(function(id) {
+                    return allTables.find(function(t){ return t.id === id; });
+                }).filter(Boolean);
+                var totalCap = selectedGroup.reduce(function(sum, t){ return sum + t.capacity; }, 0);
+                var tableNames = selectedGroup.map(function(t){ return t.name; }).join(' + ');
+                document.getElementById('bookingDetails').innerHTML =
+                    '<p><strong>Tables:</strong> ' + tableNames + '</p>' +
+                    '<p><strong>Combined Capacity:</strong> ' + totalCap + ' people</p>' +
+                    '<p><strong>Area:</strong> ' + table.zone.charAt(0) + table.zone.slice(1).toLowerCase() + '</p>' +
+                    '<p><strong>Date:</strong> ' + currentFilters.date + '</p>' +
+                    '<p><strong>Time:</strong> ' + currentFilters.time + '</p>' +
+                    '<p><strong>Party Size:</strong> ' + ps + '</p>';
+            } else {
+                document.getElementById('bookingDetails').innerHTML =
+                    '<p><strong>Table:</strong> ' + table.name + '</p>' +
+                    '<p><strong>Capacity:</strong> ' + table.capacity + ' people</p>' +
+                    '<p><strong>Area:</strong> ' + table.zone.charAt(0) + table.zone.slice(1).toLowerCase() + '</p>' +
+                    tagsHtml +
+                    '<p><strong>Date:</strong> ' + currentFilters.date + '</p>' +
+                    '<p><strong>Time:</strong> ' + currentFilters.time + '</p>' +
+                    '<p><strong>Party Size:</strong> ' + ps + '</p>';
+            }
+            document.getElementById('durationSelect').value = '2';
+            filterDurationOptions(currentFilters.time);
+            updateEndTimeDisplay();
+            document.getElementById('bookingModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('bookingModal').style.display = 'none';
+            selectedTable = null;
+            selectedGroup = null;
+            document.getElementById('guestName').value = '';
+        }
+
+        function confirmBooking() {
+            var guestName = document.getElementById('guestName').value.trim();
+            if (!guestName) { alert('Please enter your name.'); return; }
+            var dur = parseFloat(document.getElementById('durationSelect').value);
+            var endTime = addHoursToTime(currentFilters.time, dur);
+            var partySize = parseInt(currentFilters.partySize) || 2;
+
+            // Client-side working hours validation
+            if (workingHours) {
+                var openStr = workingHours.openTime ? workingHours.openTime.substring(0,5) : null;
+                var closeStr = workingHours.closeTime ? workingHours.closeTime.substring(0,5) : null;
+                if (openStr && currentFilters.time < openStr) {
+                    alert('Restaurant opens at ' + openStr + '. Please choose a later time.');
+                    return;
+                }
+                if (closeStr && currentFilters.time >= closeStr) {
+                    alert('Restaurant closes at ' + closeStr + '. Please choose an earlier time.');
+                    return;
+                }
+                if (closeStr && endTime > closeStr) {
+                    alert('Your reservation would end at ' + endTime + ', but the restaurant closes at ' + closeStr + '. Please choose an earlier time or shorter duration.');
+                    return;
+                }
+            }
+
+            // Determine which tables to book
+            var tableIds = [];
+            if (selectedGroup && selectedGroup.length > 1) {
+                tableIds = selectedGroup.map(function(t){ return t.id; });
+            } else {
+                tableIds = [selectedTable.id];
+            }
+
+            // Generate a groupId for multi-table bookings
+            var groupId = tableIds.length > 1 ? crypto.randomUUID() : null;
+
+            // Book all tables
+            var promises = tableIds.map(function(tid) {
+                var booking = {
+                    tableId: tid,
+                    guestName: guestName,
+                    partySize: partySize,
+                    date: currentFilters.date,
+                    startTime: currentFilters.time,
+                    endTime: endTime,
+                    groupId: groupId
+                };
+                return fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(booking) })
+                    .then(function(r) {
+                        if (!r.ok) return r.json().then(function(err) { throw new Error(err.error || 'Booking failed'); });
+                        return r.json();
+                    });
+            });
+            Promise.all(promises)
+                .then(function() { alert('Reservation confirmed!'); closeModal(); loadTables(); })
+                .catch(function(err) { alert(err.message || 'Sorry, there was an issue. Please try again.'); });
+        }
+
+        window.onclick = function(e) { if (e.target === document.getElementById('bookingModal')) closeModal(); };
+    </script>
+</body>
+</html>
