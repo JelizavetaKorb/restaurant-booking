@@ -2,14 +2,14 @@
 Restaurant table reservation app with a visual floor plan. Built as a take-home assignment.
 
 ## How to Run
-You need **Java 21**. Check with `java -version`. If you don't have it, grab it from [Adoptium](https://adoptium.net/) or on Mac: `brew install openjdk@21`.
+You need **Java 21**. Check with `java -version`. On Mac: `brew install openjdk@21`.
 No need to install Maven, the project has a wrapper included.
 ```bash
-git clone <repository-url>
+git clone <copied-repository-url>
 cd restaurant-booking
 ./mvnw spring-boot:run
 ```
-Or just open the project in IntelliJ and run `RestaurantBookingApplication`.
+Or open the project in IntelliJ and run `RestaurantBookingApplication`.
 Then go to http://localhost:8080.
 The database is H2 in-memory, so everything resets when you restart. Sample tables and bookings are loaded automatically on startup from `data.sql`.
 
@@ -26,13 +26,13 @@ Java 21, Spring Boot 3.2, Spring Data JPA, H2, vanilla HTML/CSS/JS, Maven.
 
 ## Development
 Took around **30 hours** total. I broke the work into stages and mostly followed this order:
-1. Planning and setup -- figured out what the app needs, picked the stack, scaffolded the Spring Boot project.
-2. Data model and backend -- designed the schema, wrote entities and repositories, built the service layer with availability checks and scoring.
-3. REST API -- wired up controllers for tables, bookings, and settings.
-4. Customer frontend -- SVG floor plan, filters, table rendering, booking modal.
-5. Admin panel -- login, drag-and-drop table management, reservations list, working hours config.
-6. Testing and cleanup -- wrote tests, extracted CSS, fixed edge cases.
-7. Seed data and docs -- populated data.sql and wrote this README.
+1. Planning and setup - figured out what the app needs, picked the stack, scaffolded the Spring Boot project.
+2. Data model and backend - designed the schema, wrote entities and repositories, built the service layer with availability checks and scoring.
+3. REST API - wired up controllers for tables, bookings, and settings.
+4. Customer frontend - SVG floor plan, filters, table rendering, booking modal.
+5. Admin panel - login, drag-and-drop table management, reservations list, working hours config.
+6. Testing and cleanup - wrote tests, extracted CSS, fixed edge cases.
+7. Seed data and docs - populated data.sql and wrote this README.
 
 The drag-and-drop positioning was the hardest part. Getting coordinates right across screen sizes and keeping zone detection accurate after moves took a while.
 
